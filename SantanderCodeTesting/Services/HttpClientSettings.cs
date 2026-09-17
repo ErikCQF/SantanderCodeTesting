@@ -2,4 +2,5 @@
 public class HttpClientSettings
 {
     public string BaseUrl { get; set; } = string.Empty;
+    public int MaxHttpCalls { get; set; }
 }

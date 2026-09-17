@@ -1,5 +1,7 @@
-﻿using SantanderCodeTesting.InfraStructure;
+﻿using Microsoft.Extensions.Options;
+using SantanderCodeTesting.InfraStructure;
 using SantanderCodeTesting.Model;
+using System.Threading;
 
 namespace SantanderCodeTesting.Services;
 
@@ -10,11 +12,17 @@ public class FetcherException : Exception
 public sealed class FetcherHttpClient : IFetcher
 {
     private readonly ILogger<FetcherHttpClient> _logger;
+    private readonly IOptions<HttpClientSettings> _options;
     private readonly HttpClient _httpClient;
+    private readonly SemaphoreSlim _semaphore;
 
-    public FetcherHttpClient(ILogger<FetcherHttpClient> logger, HttpClient httpClient)
+    public FetcherHttpClient(ILogger<FetcherHttpClient> logger,
+                             IOptions<HttpClientSettings> options,
+                             HttpClient httpClient)
     {
         _logger = logger;
+        _options = options;
+        _semaphore = new(_options.Value.MaxHttpCalls, _options.Value.MaxHttpCalls);
         _httpClient = httpClient;
     }
 
@@ -28,6 +36,7 @@ public sealed class FetcherHttpClient : IFetcher
 
     public async Task<HackerItemData?> GetItemAsync(int id, CancellationToken cancellationToken)
     {
+        await _semaphore.WaitAsync(cancellationToken);
         try
         {
             return await _httpClient.GetFromJsonAsync<HackerItemData>($"item/{id}.json", cancellationToken);
@@ -36,6 +45,10 @@ public sealed class FetcherHttpClient : IFetcher
         {
             _logger.LogWarning(ex, "Failed to fetch Hacker News item {ItemId}", id);
             throw;
+        }
+        finally
+        {
+            _semaphore.Release();
         }
     }
 }
